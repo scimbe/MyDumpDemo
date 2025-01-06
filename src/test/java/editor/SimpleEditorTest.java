@@ -4,19 +4,30 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import javax.swing.*;
 import java.awt.event.KeyEvent;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 public class SimpleEditorTest {
     private SimpleEditor editor;
+    private JTextArea textArea;
 
     @BeforeEach
     void setUp() {
         editor = new SimpleEditor();
+        // Get the textArea from the editor using reflection
+        try {
+            java.lang.reflect.Field field = SimpleEditor.class.getDeclaredField("textArea");
+            field.setAccessible(true);
+            textArea = (JTextArea) field.get(editor);
+        } catch (Exception e) {
+            fail("Could not access textArea field");
+        }
     }
 
     @Test
     void editorShouldInitialize() {
         assertNotNull(editor);
+        assertNotNull(textArea);
     }
 
     @Test
@@ -33,18 +44,18 @@ public class SimpleEditorTest {
     @Test
     void editorShouldHandleTextOperations() {
         String testText = "Hello, World!";
-        editor.setText(testText);
-        assertEquals(testText, editor.getText());
+        textArea.setText(testText);
+        assertEquals(testText, textArea.getText());
     }
 
     @Test
     void editorShouldUpdateTitleOnModification() {
-        editor.setText("Some text");
+        textArea.setText("Some text");
         assertTrue(editor.getTitle().startsWith("*"));
     }
     
     @Test
-    void menuBarShouldContainSearchMenu() {
+    void editorShouldHaveSearchMenu() {
         JMenuBar menuBar = editor.getJMenuBar();
         boolean hasSearchMenu = false;
         
@@ -90,21 +101,21 @@ public class SimpleEditorTest {
         String initialText = "Initial text";
         String appendText = " with more content";
         
-        editor.setText(initialText);
-        assertEquals(initialText, editor.getText());
+        textArea.setText(initialText);
+        assertEquals(initialText, textArea.getText());
         
-        editor.setText(initialText + appendText);
-        assertEquals(initialText + appendText, editor.getText());
+        textArea.setText(initialText + appendText);
+        assertEquals(initialText + appendText, textArea.getText());
     }
     
     @Test
-    void editorShouldClearTextOnNew() {
-        editor.setText("Some test text");
-        assertFalse(editor.getText().isEmpty());
+    void editorShouldClearTextOnNewFile() {
+        textArea.setText("Some test text");
+        assertFalse(textArea.getText().isEmpty());
         
-        // Simuliere "New File" Operation
-        editor.setText("");
-        assertTrue(editor.getText().isEmpty());
+        // Simulate "New File" operation
+        textArea.setText("");
+        assertTrue(textArea.getText().isEmpty());
     }
     
     @Test
@@ -113,11 +124,11 @@ public class SimpleEditorTest {
         assertFalse(editor.getTitle().startsWith("*"));
         
         // After modification
-        editor.setText("Modified content");
+        textArea.setText("Modified content");
         assertTrue(editor.getTitle().startsWith("*"));
         
         // After clearing
-        editor.setText("");
+        textArea.setText("");
         assertTrue(editor.getTitle().startsWith("*"));
     }
 }
