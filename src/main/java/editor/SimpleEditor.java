@@ -15,6 +15,12 @@ public class SimpleEditor extends JFrame {
     private boolean isModified;
     private UndoManager undoManager;
     private JLabel statusBar;
+    private JDialog findReplaceDialog;
+    private JTextField findField;
+    private JTextField replaceField;
+    private int lastSearchIndex = 0;
+    private JCheckBox caseSensitiveCheckbox;
+    private JCheckBox wholeWordsCheckbox;
     
     public SimpleEditor() {
         setTitle("Simple Editor");
@@ -46,6 +52,9 @@ public class SimpleEditor extends JFrame {
         
         // Setup key bindings
         setupKeyBindings();
+        
+        // Create find/replace dialog
+        createFindReplaceDialog();
     }
     
     private void setupMenuBar() {
@@ -69,143 +78,199 @@ public class SimpleEditor extends JFrame {
         addMenuItem(editMenu, "Copy", KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK), e -> copy());
         addMenuItem(editMenu, "Paste", KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK), e -> paste());
         
+        // Search Menu
+        JMenu searchMenu = new JMenu("Search");
+        addMenuItem(searchMenu, "Find/Replace", KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), e -> showFindReplace());
+        addMenuItem(searchMenu, "Find Next", KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0), e -> findNext());
+        
         menuBar.add(fileMenu);
         menuBar.add(editMenu);
+        menuBar.add(searchMenu);
         setJMenuBar(menuBar);
     }
     
-    private void addMenuItem(JMenu menu, String title, KeyStroke accelerator, ActionListener listener) {
-        JMenuItem item = new JMenuItem(title);
-        if (accelerator != null) item.setAccelerator(accelerator);
-        item.addActionListener(listener);
-        menu.add(item);
-    }
-    
-    private void setupDocumentListener() {
-        textArea.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) { setModified(true); }
-            public void removeUpdate(DocumentEvent e) { setModified(true); }
-            public void changedUpdate(DocumentEvent e) { setModified(true); }
-        });
-    }
-    
-    private void setupWindowListener() {
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(WindowEvent e) {
-                exit();
-            }
-        });
-    }
-    
-    private void setupKeyBindings() {
-        InputMap inputMap = textArea.getInputMap();
-        ActionMap actionMap = textArea.getActionMap();
+    private void createFindReplaceDialog() {
+        findReplaceDialog = new JDialog(this, "Find/Replace", false);
+        findReplaceDialog.setLayout(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
         
-        // Add custom key bindings here if needed
+        // Find field
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.EAST;
+        gbc.insets = new Insets(5, 5, 5, 5);
+        findReplaceDialog.add(new JLabel("Find:"), gbc);
+        
+        findField = new JTextField(20);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        findReplaceDialog.add(findField, gbc);
+        
+        // Replace field
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        findReplaceDialog.add(new JLabel("Replace:"), gbc);
+        
+        replaceField = new JTextField(20);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        findReplaceDialog.add(replaceField, gbc);
+        
+        // Options panel
+        JPanel optionsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        caseSensitiveCheckbox = new JCheckBox("Case sensitive");
+        wholeWordsCheckbox = new JCheckBox("Whole words only");
+        optionsPanel.add(caseSensitiveCheckbox);
+        optionsPanel.add(wholeWordsCheckbox);
+        
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        findReplaceDialog.add(optionsPanel, gbc);
+        
+        // Buttons panel
+        JPanel buttonsPanel = new JPanel();
+        JButton findNextButton = new JButton("Find Next");
+        JButton replaceButton = new JButton("Replace");
+        JButton replaceAllButton = new JButton("Replace All");
+        JButton closeButton = new JButton("Close");
+        
+        findNextButton.addActionListener(e -> findNext());
+        replaceButton.addActionListener(e -> replace());
+        replaceAllButton.addActionListener(e -> replaceAll());
+        closeButton.addActionListener(e -> findReplaceDialog.setVisible(false));
+        
+        buttonsPanel.add(findNextButton);
+        buttonsPanel.add(replaceButton);
+        buttonsPanel.add(replaceAllButton);
+        buttonsPanel.add(closeButton);
+        
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.gridwidth = 2;
+        findReplaceDialog.add(buttonsPanel, gbc);
+        
+        findReplaceDialog.pack();
+        findReplaceDialog.setLocationRelativeTo(this);
     }
     
-    private void setModified(boolean modified) {
-        isModified = modified;
-        updateTitle();
+    private void showFindReplace() {
+        findReplaceDialog.setVisible(true);
+        findField.requestFocus();
     }
     
-    private void updateTitle() {
-        String title = "Simple Editor";
-        if (currentFile != null) {
-            title = currentFile.getName() + " - " + title;
+    private boolean matchesSearchCriteria(String text, String pattern, int position) {
+        if (!caseSensitiveCheckbox.isSelected()) {
+            text = text.toLowerCase();
+            pattern = pattern.toLowerCase();
         }
-        if (isModified) {
-            title = "* " + title;
+        
+        if (!wholeWordsCheckbox.isSelected()) {
+            return text.indexOf(pattern, position) == position;
         }
-        setTitle(title);
+        
+        boolean startMatches = position == 0 || !Character.isLetterOrDigit(text.charAt(position - 1));
+        boolean endMatches = (position + pattern.length() == text.length()) || 
+                           !Character.isLetterOrDigit(text.charAt(position + pattern.length()));
+        
+        return startMatches && endMatches && text.indexOf(pattern, position) == position;
     }
     
-    private void newFile() {
-        if (checkSave()) {
-            textArea.setText("");
-            currentFile = null;
-            setModified(false);
-            statusBar.setText(" New file");
+    private void findNext() {
+        String searchText = findField.getText();
+        String content = textArea.getText();
+        
+        if (!caseSensitiveCheckbox.isSelected()) {
+            content = content.toLowerCase();
+            searchText = searchText.toLowerCase();
         }
-    }
-    
-    private void openFile() {
-        if (checkSave() && fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                textArea.read(reader, null);
-                currentFile = file;
-                setModified(false);
-                statusBar.setText(" File opened: " + file.getName());
-            } catch (IOException e) {
-                JOptionPane.showMessageDialog(this, 
-                    "Error reading file: " + e.getMessage(), 
-                    "Error", 
-                    JOptionPane.ERROR_MESSAGE);
+        
+        if (searchText.isEmpty()) {
+            statusBar.setText(" Nothing to search for");
+            return;
+        }
+        
+        int startIndex = lastSearchIndex + 1;
+        if (startIndex >= content.length()) {
+            startIndex = 0;
+        }
+        
+        int index = -1;
+        for (int i = startIndex; i < content.length(); i++) {
+            if (matchesSearchCriteria(content, searchText, i)) {
+                index = i;
+                break;
             }
         }
-    }
-    
-    private boolean saveFile() {
-        if (currentFile == null) {
-            return saveFileAs();
-        }
-        return saveToFile(currentFile);
-    }
-    
-    private boolean saveFileAs() {
-        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            return saveToFile(fileChooser.getSelectedFile());
-        }
-        return false;
-    }
-    
-    private boolean saveToFile(File file) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-            textArea.write(writer);
-            currentFile = file;
-            setModified(false);
-            statusBar.setText(" File saved: " + file.getName());
-            return true;
-        } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, 
-                "Error saving file: " + e.getMessage(), 
-                "Error", 
-                JOptionPane.ERROR_MESSAGE);
-            return false;
-        }
-    }
-    
-    private boolean checkSave() {
-        if (isModified) {
-            int response = JOptionPane.showConfirmDialog(this,
-                "The current file has been modified. Save changes?",
-                "Save Changes?",
-                JOptionPane.YES_NO_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-            
-            if (response == JOptionPane.YES_OPTION) {
-                return saveFile();
+        
+        if (index == -1 && startIndex > 0) {
+            // Try again from the beginning
+            for (int i = 0; i < startIndex; i++) {
+                if (matchesSearchCriteria(content, searchText, i)) {
+                    index = i;
+                    break;
+                }
             }
-            return response != JOptionPane.CANCEL_OPTION;
         }
-        return true;
+        
+        if (index == -1) {
+            statusBar.setText(" Text not found: " + searchText);
+            return;
+        }
+        
+        textArea.setSelectionStart(index);
+        textArea.setSelectionEnd(index + searchText.length());
+        textArea.requestFocus();
+        lastSearchIndex = index;
+        statusBar.setText(" Found at position: " + (index + 1));
     }
     
-    private void exit() {
-        if (checkSave()) {
-            dispose();
-            System.exit(0);
+    private void replace() {
+        if (textArea.getSelectedText() == null) {
+            findNext();
+            return;
         }
+        
+        String replaceText = replaceField.getText();
+        textArea.replaceSelection(replaceText);
+        lastSearchIndex = textArea.getSelectionStart();
+        findNext();
     }
     
-    // Edit functions
-    private void undo() {
-        if (undoManager.canUndo()) {
-            undoManager.undo();
-            statusBar.setText(" Undo");
+    private void replaceAll() {
+        String searchText = findField.getText();
+        String replaceText = replaceField.getText();
+        String content = textArea.getText();
+        
+        if (searchText.isEmpty()) {
+            statusBar.setText(" Nothing to replace");
+            return;
         }
+        
+        int count = 0;
+        StringBuilder newContent = new StringBuilder();
+        int lastIndex = 0;
+        
+        if (!caseSensitiveCheckbox.isSelected()) {
+            searchText = searchText.toLowerCase();
+            content = content.toLowerCase();
+        }
+        
+        for (int i = 0; i < content.length(); i++) {
+            if (matchesSearchCriteria(content, searchText, i)) {
+                newContent.append(textArea.getText().substring(lastIndex, i));
+                newContent.append(replaceText);
+                lastIndex = i + searchText.length();
+                i = lastIndex - 1;
+                count++;
+            }
+        }
+        
+        newContent.append(textArea.getText().substring(lastIndex));
+        textArea.setText(newContent.toString());
+        statusBar.setText(" Replaced " + count + " occurrences");
     }
     
     private void redo() {
