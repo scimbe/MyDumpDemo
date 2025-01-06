@@ -27,4 +27,17 @@ public class SimpleEditorTest {
         assertEquals(800, editor.getWidth());
         assertEquals(600, editor.getHeight());
     }
+
+    @Test
+    void editorShouldHandleTextOperations() {
+        String testText = "Hello, World!";
+        editor.setText(testText);
+        assertEquals(testText, editor.getText());
+    }
+
+    @Test
+    void editorShouldUpdateTitleOnModification() {
+        editor.setText("Some text");
+        assertTrue(editor.getTitle().startsWith("*"));
+    }
 }
